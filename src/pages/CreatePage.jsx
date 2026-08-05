@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createPost, getPost } from '../services/postService'
 import { getUserId } from '../utils/userId'
+import { uploadImage } from '../services/storageService'
 import { POST_FIELDS, FLAGS, AIRING_STATUSES } from '../constants'
 import './CreatePage.css'
 
@@ -9,6 +10,7 @@ export default function CreatePage() {
     const navigate = useNavigate()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+    const [imageFile, setImageFile] = useState(null)
 
     const [form, setForm] = useState({
         [POST_FIELDS.TITLE]: '',
@@ -28,8 +30,14 @@ export default function CreatePage() {
 
     async function handleSubmit(e) {
         e.preventDefault()
+
         if (!form[POST_FIELDS.TITLE].trim()) {
             setError('Title is required')
+            return
+        }
+
+        if (form[POST_FIELDS.IMAGE_URL] && imageFile) {          // ← new block goes here
+            setError('Please provide either an image URL or an uploaded file, not both.')
             return
         }
 
@@ -49,8 +57,21 @@ export default function CreatePage() {
                 }
             }
 
+            let finalImageUrl = form[POST_FIELDS.IMAGE_URL]
+
+            if (imageFile) {
+                try {
+                    finalImageUrl = await uploadImage(imageFile)
+                } catch (err) {
+                    setError('Image upload failed: ' + err.message)
+                    setLoading(false)
+                    return
+                }
+            }
+
             const newPost = await createPost({
                 ...form,
+                [POST_FIELDS.IMAGE_URL]: finalImageUrl,
                 [POST_FIELDS.REPOST_OF]: repostId || null,
                 [POST_FIELDS.AUTHOR_ID]: getUserId(),
             })
@@ -93,7 +114,23 @@ export default function CreatePage() {
                         name={POST_FIELDS.IMAGE_URL}
                         value={form[POST_FIELDS.IMAGE_URL]}
                         onChange={handleChange}
+                        disabled={!!imageFile}
                     />
+                </label>
+
+                <label>
+                    Or upload an image
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={e => setImageFile(e.target.files[0] || null)}
+                        disabled={!!form[POST_FIELDS.IMAGE_URL]}
+                    />
+                    {imageFile && (
+                        <button type="button" onClick={() => setImageFile(null)}>
+                            Remove file
+                        </button>
+                    )}
                 </label>
 
                 <label>
